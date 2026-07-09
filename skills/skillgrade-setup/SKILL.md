@@ -17,6 +17,7 @@ description: Sets up and runs skillgrade evaluation pipelines for Agent Skills. 
 3. Run `skillgrade init` to generate an `eval.yaml` with AI-powered tasks and graders.
 4. If an `eval.yaml` already exists, pass `--force` to overwrite: `skillgrade init --force`.
 5. Without an API key, a well-commented template is generated instead.
+6. `init` resolves its model as the provider's `*_MODEL` env var (`ANTHROPIC_MODEL`, `OPENAI_MODEL`, `GEMINI_MODEL`) → provider default, so a newly released model needs no code change: `ANTHROPIC_MODEL=claude-opus-4-8 skillgrade init`.
 
 **Step 3: Configure eval.yaml**
 1. Read `references/eval-yaml-spec.md` for the full configuration schema.
@@ -25,7 +26,7 @@ description: Sets up and runs skillgrade evaluation pipelines for Agent Skills. 
    - `instruction`: what the agent should accomplish
    - `workspace`: files to copy into the evaluation container
    - `graders`: one or more scoring mechanisms (see the `skillgrade-graders` skill)
-3. Optionally configure `defaults:` for agent, provider, trials, timeout, and threshold.
+3. Optionally configure `defaults:` for agent, provider, trials, timeout, and threshold. To pin the LLM-grader model, set `defaults.grader_model` (or a per-grader `model:`); it also honors the `*_MODEL` env var. See `references/eval-yaml-spec.md` → Model selection.
 
 **Step 4: Run Evaluations**
 1. Select an appropriate preset based on the evaluation goal:

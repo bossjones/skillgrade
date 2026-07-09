@@ -46,6 +46,7 @@ description: Authors deterministic and LLM rubric graders for skillgrade evaluat
      model: gemini-3-flash-preview  # optional, each provider has a default model
    ```
 4. For long rubrics, store in a separate file and reference by path: `rubric: rubrics/quality.md`.
+5. Choose the judge model by config or environment — no code change is needed to adopt a newly released model. Resolution precedence (highest first): a grader's `model:` → the task's `grader_model:` → `defaults.grader_model:` → the provider's `*_MODEL` env var (`ANTHROPIC_MODEL`, `OPENAI_MODEL`, `GEMINI_MODEL`) → the provider default (`anthropic` → `claude-sonnet-5`, `openai` → `gpt-4o`, `gemini` → `gemini-3-flash-preview`). Example one-off override: `ANTHROPIC_MODEL=claude-opus-4-8 skillgrade`.
 
 **Step 4: Combine Multiple Graders**
 1. Assign weights to each grader based on importance. Weights are normalized automatically.

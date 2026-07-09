@@ -75,8 +75,36 @@ Array of evaluation tasks. Each task has:
 | `setup` | string | No | Install command for grader dependencies |
 | `rubric` | string | LLM only | Evaluation rubric text or file path |
 | `provider` | string | No | LLM provider: `gemini` (default), `anthropic`, or `openai` |
-| `model` | string | No | LLM model override (each provider has a default) |
+| `model` | string | No | LLM model override (each provider has a default; see [Model selection](#model-selection)) |
 | `weight` | number | No | Grader weight (default: 1) |
+
+## Model selection
+
+You never need to edit code (or wait for a skillgrade release) to adopt a newly released model —
+set it by config or environment variable. The LLM-grader model is resolved by this precedence,
+highest first:
+
+1. A grader's own `model:` field
+2. A task's `grader_model:`
+3. `defaults.grader_model:`
+4. The provider's `*_MODEL` environment variable — `ANTHROPIC_MODEL`, `OPENAI_MODEL`, or
+   `GEMINI_MODEL`
+5. The provider's built-in default (`anthropic` → `claude-sonnet-5`, `openai` → `gpt-4o`,
+   `gemini` → `gemini-3-flash-preview`)
+
+```yaml
+defaults:
+  grader_provider: anthropic
+  grader_model: claude-sonnet-5   # or any current model ID — no code change needed
+```
+
+```bash
+# Override for a single run without editing eval.yaml:
+ANTHROPIC_MODEL=claude-opus-4-8 skillgrade
+```
+
+`skillgrade init` (AI-generated `eval.yaml`) has no config file yet, so it resolves its model as
+`*_MODEL` env var → provider default only.
 
 ## File References
 
