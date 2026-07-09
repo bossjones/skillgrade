@@ -46,3 +46,42 @@ export function resolveModel(
   if (envValue) return envValue;
   return DEFAULT_MODELS[provider];
 }
+
+/**
+ * Default API base URL per provider. Gemini is intentionally absent — it has no
+ * base-URL override (its API key rides in the query string and the model sits in
+ * the path), so there is nothing to point elsewhere.
+ */
+export const DEFAULT_BASE_URLS: Partial<Record<LLMProvider, string>> = {
+  anthropic: 'https://api.anthropic.com/v1',
+  openai: 'https://api.openai.com/v1',
+};
+
+/** Environment variable that overrides the default base URL, per provider. */
+const BASE_URL_ENV_VARS: Partial<Record<LLMProvider, string>> = {
+  anthropic: 'ANTHROPIC_BASE_URL',
+  openai: 'OPENAI_BASE_URL',
+};
+
+/**
+ * Resolve the API base URL for a provider, with trailing slashes stripped.
+ * Precedence, highest first:
+ *   1. `override` — an explicit value
+ *   2. the provider's `*_BASE_URL` variable in `env` (falling back to `process.env`)
+ *   3. the built-in default from {@link DEFAULT_BASE_URLS}
+ *
+ * Only `anthropic` and `openai` have a base URL; any other provider yields `''`.
+ */
+export function resolveBaseUrl(
+  provider: LLMProvider,
+  override?: string,
+  env?: Record<string, string>,
+): string {
+  const envName = BASE_URL_ENV_VARS[provider];
+  const raw =
+    override ??
+    (envName ? (env?.[envName] ?? process.env[envName]) : undefined) ??
+    DEFAULT_BASE_URLS[provider] ??
+    '';
+  return raw.replace(/\/+$/, '');
+}

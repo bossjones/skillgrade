@@ -283,8 +283,8 @@ Exits with code 1 if pass rate falls below `--threshold` (default: 0.8).
 | `GEMINI_API_KEY` | Agent execution, LLM grading (`provider: gemini`), `skillgrade init` |
 | `ANTHROPIC_API_KEY` | Agent execution, LLM grading (`provider: anthropic`), `skillgrade init` |
 | `OPENAI_API_KEY` | Agent execution (Codex), LLM grading (`provider: openai`), `skillgrade init` |
-| `ANTHROPIC_BASE_URL` | LLM grading (`provider: anthropic`) — custom Anthropic-compatible endpoint |
-| `OPENAI_BASE_URL` | LLM grading (`provider: openai`) — custom OpenAI-compatible endpoint (Ollama, vLLM, etc.) |
+| `ANTHROPIC_BASE_URL` | LLM grading (`provider: anthropic`) and `skillgrade init` — custom Anthropic-compatible endpoint |
+| `OPENAI_BASE_URL` | LLM grading (`provider: openai`) and `skillgrade init` — custom OpenAI-compatible endpoint (Ollama, vLLM, etc.) |
 
 Variables are also loaded from `.env` in the skill directory. Shell values override `.env`. All values are **redacted** from persisted session logs.
 

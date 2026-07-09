@@ -9,7 +9,7 @@ import * as fs from 'fs-extra';
 import * as path from 'path';
 import { detectSkills } from '../core/skills';
 import { parseEnvFile } from '../utils/env';
-import { resolveModel } from '../core/models';
+import { resolveModel, resolveBaseUrl } from '../core/models';
 
 export async function runInit(dir: string, opts: { force?: boolean } = {}) {
   const evalPath = path.join(dir, 'eval.yaml');
@@ -223,7 +223,7 @@ tasks:
 
   if (provider === 'anthropic') {
     // Honor ANTHROPIC_BASE_URL for parity with the grader (gateways/proxies, self-hosted).
-    const baseUrl = (process.env.ANTHROPIC_BASE_URL || 'https://api.anthropic.com/v1').replace(/\/+$/, '');
+    const baseUrl = resolveBaseUrl('anthropic');
     const response = await fetch(`${baseUrl}/messages`, {
       method: 'POST',
       headers: {
@@ -250,7 +250,9 @@ tasks:
     text = data.content?.find((b: any) => b.type === 'text')?.text;
     if (!text) throw new Error('Empty response from Anthropic API');
   } else if (provider === 'openai') {
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    // Honor OPENAI_BASE_URL for parity with the grader (Ollama, vLLM, proxies, self-hosted).
+    const baseUrl = resolveBaseUrl('openai');
+    const response = await fetch(`${baseUrl}/chat/completions`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

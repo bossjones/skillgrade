@@ -1,5 +1,5 @@
 import { GraderConfig, GraderResult, EnvironmentProvider } from '../types';
-import { resolveModel, LLMProvider } from '../core/models';
+import { resolveModel, resolveBaseUrl, LLMProvider } from '../core/models';
 import * as fs from 'fs-extra';
 import * as path from 'path';
 
@@ -203,6 +203,16 @@ Respond with ONLY a JSON object: {"score": <number>, "reasoning": "<brief explan
                 })
             });
 
+            if (!response.ok) {
+                const errBody = await response.text().catch(() => '');
+                return {
+                    grader_type: 'llm_rubric',
+                    score: 0,
+                    weight: config.weight,
+                    details: `Gemini API error: HTTP ${response.status} ${errBody.slice(0, 300)}`.trim()
+                };
+            }
+
             const data = await response.json() as any;
             const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
             return this.parseResponse(text, config);
@@ -221,8 +231,7 @@ Respond with ONLY a JSON object: {"score": <number>, "reasoning": "<brief explan
                 details: 'Missing ANTHROPIC_API_KEY. Set the ANTHROPIC_API_KEY environment variable to use the "anthropic" grader provider.'
             };
         }
-        const baseUrl = (env?.ANTHROPIC_BASE_URL || process.env.ANTHROPIC_BASE_URL || 'https://api.anthropic.com/v1').replace(/\/+$/, '');
-        const url = `${baseUrl}/messages`;
+        const url = `${resolveBaseUrl('anthropic', undefined, env)}/messages`;
 
         try {
             const response = await fetch(url, {
@@ -238,6 +247,16 @@ Respond with ONLY a JSON object: {"score": <number>, "reasoning": "<brief explan
                     messages: [{ role: 'user', content: prompt }]
                 })
             });
+
+            if (!response.ok) {
+                const errBody = await response.text().catch(() => '');
+                return {
+                    grader_type: 'llm_rubric',
+                    score: 0,
+                    weight: config.weight,
+                    details: `Anthropic API error: HTTP ${response.status} ${errBody.slice(0, 300)}`.trim()
+                };
+            }
 
             const data = await response.json() as any;
             // Pick the text block: adaptive thinking (on by default on Sonnet 5) prepends a
@@ -259,8 +278,7 @@ Respond with ONLY a JSON object: {"score": <number>, "reasoning": "<brief explan
                 details: 'Missing OPENAI_API_KEY. Set the OPENAI_API_KEY environment variable to use the "openai" grader provider.'
             };
         }
-        const baseUrl = (env?.OPENAI_BASE_URL || process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1').replace(/\/+$/, '');
-        const url = `${baseUrl}/chat/completions`;
+        const url = `${resolveBaseUrl('openai', undefined, env)}/chat/completions`;
 
         try {
             const response = await fetch(url, {
@@ -276,6 +294,16 @@ Respond with ONLY a JSON object: {"score": <number>, "reasoning": "<brief explan
                     messages: [{ role: 'user', content: prompt }],
                 }),
             });
+
+            if (!response.ok) {
+                const errBody = await response.text().catch(() => '');
+                return {
+                    grader_type: 'llm_rubric',
+                    score: 0,
+                    weight: config.weight,
+                    details: `OpenAI API error: HTTP ${response.status} ${errBody.slice(0, 300)}`.trim()
+                };
+            }
 
             const data = await response.json() as any;
             const msg = data?.choices?.[0]?.message;

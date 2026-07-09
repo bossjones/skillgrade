@@ -213,3 +213,41 @@ describe('generateWithLLM — Anthropic request', () => {
     expect(result).not.toContain('```');
   });
 });
+
+describe('generateWithLLM — OpenAI request', () => {
+  const skills = [{ name: 'my-skill', skillMd: '# My Skill\n\nDoes a thing.' }];
+  const savedEnv = { ...process.env };
+  let originalFetch: typeof globalThis.fetch;
+
+  beforeEach(() => {
+    originalFetch = globalThis.fetch;
+  });
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+    process.env = { ...savedEnv };
+  });
+
+  function stubFetch() {
+    const captured: { url?: string; body?: any } = {};
+    globalThis.fetch = vi.fn().mockImplementation(async (url: string, opts: any) => {
+      captured.url = url;
+      captured.body = JSON.parse(opts.body);
+      return { ok: true, json: () => Promise.resolve({ choices: [{ message: { content: 'version: "1"\n' } }] }) };
+    }) as any;
+    return captured;
+  }
+
+  it('posts to the default chat/completions endpoint', async () => {
+    delete process.env.OPENAI_BASE_URL;
+    const captured = stubFetch();
+    await generateWithLLM(skills, 'test-key', 'openai');
+    expect(captured.url).toBe('https://api.openai.com/v1/chat/completions');
+  });
+
+  it('honors OPENAI_BASE_URL for parity with the grader', async () => {
+    process.env.OPENAI_BASE_URL = 'http://localhost:8080/v1';
+    const captured = stubFetch();
+    await generateWithLLM(skills, 'test-key', 'openai');
+    expect(captured.url).toBe('http://localhost:8080/v1/chat/completions');
+  });
+});
