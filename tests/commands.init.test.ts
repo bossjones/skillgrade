@@ -158,7 +158,7 @@ describe('generateWithLLM — Anthropic request', () => {
     globalThis.fetch = vi.fn().mockImplementation(async (url: string, opts: any) => {
       captured.url = url;
       captured.body = JSON.parse(opts.body);
-      return { ok: true, json: () => Promise.resolve({ content: [{ text: 'version: "1"\n' }] }) };
+      return { ok: true, json: () => Promise.resolve({ content: [{ type: 'text', text: 'version: "1"\n' }] }) };
     }) as any;
     return captured;
   }
@@ -196,5 +196,20 @@ describe('generateWithLLM — Anthropic request', () => {
     const captured = stubFetch();
     await generateWithLLM(skills, 'test-key', 'anthropic');
     expect(captured.url).toBe('http://localhost:8080/v1/messages');
+  });
+
+  it('reads the text block past a leading thinking block (adaptive thinking is on by default on Sonnet 5)', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({
+        content: [
+          { type: 'thinking', thinking: '' },
+          { type: 'text', text: '```yaml\nversion: "1"\ntasks: []\n```' },
+        ],
+      }),
+    }) as any;
+    const result = await generateWithLLM(skills, 'test-key', 'anthropic');
+    expect(result).toContain('version: "1"');
+    expect(result).not.toContain('```');
   });
 });

@@ -240,7 +240,9 @@ Respond with ONLY a JSON object: {"score": <number>, "reasoning": "<brief explan
             });
 
             const data = await response.json() as any;
-            const text = data?.content?.[0]?.text || '';
+            // Pick the text block: adaptive thinking (on by default on Sonnet 5) prepends a
+            // thinking block, so content[0] may not be the text.
+            const text = data?.content?.find((b: any) => b.type === 'text')?.text || '';
             return this.parseResponse(text, config);
         } catch (e) {
             return { grader_type: 'llm_rubric', score: 0, weight: config.weight, details: `Anthropic API error: ${e}` };

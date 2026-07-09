@@ -244,7 +244,9 @@ tasks:
     }
 
     const data = await response.json() as any;
-    text = data.content?.[0]?.text;
+    // Pick the text block: adaptive thinking (on by default on Sonnet 5) prepends a
+    // thinking block, so content[0] may not be the text.
+    text = data.content?.find((b: any) => b.type === 'text')?.text;
     if (!text) throw new Error('Empty response from Anthropic API');
   } else if (provider === 'openai') {
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
