@@ -1,4 +1,5 @@
 import { GraderConfig, GraderResult, EnvironmentProvider } from '../types';
+import { resolveModel, LLMProvider } from '../core/models';
 import * as fs from 'fs-extra';
 import * as path from 'path';
 
@@ -90,13 +91,6 @@ export class DeterministicGrader implements Grader {
  */
 export class LLMGrader implements Grader {
 
-    /** Default models when no model override is configured. */
-    private static readonly DEFAULT_MODELS: Record<string, string> = {
-        gemini: 'gemini-3-flash-preview',
-        anthropic: 'claude-sonnet-4-20250514',
-        openai: 'gpt-4o',
-    };
-
     async grade(
         _workspace: string,
         _provider: EnvironmentProvider,
@@ -167,7 +161,8 @@ ${transcript}
 Respond with ONLY a JSON object: {"score": <number>, "reasoning": "<brief explanation>"}`;
 
         const providerName = config.provider || 'gemini';
-        const model = config.model || LLMGrader.DEFAULT_MODELS[providerName] || 'gemini-3-flash-preview';
+        // Precedence: task-level `config.model` → `*_MODEL` env var → shared default.
+        const model = resolveModel(providerName as LLMProvider, config.model, env);
 
         switch (providerName) {
             case "gemini":

@@ -395,6 +395,31 @@ describe('LLMGrader', () => {
 
       globalThis.fetch = originalFetch;
     });
+
+    it('defaults to a current, non-retired Anthropic model', async () => {
+      delete process.env.ANTHROPIC_MODEL;
+      mockPathExists.mockResolvedValue(true as any);
+      mockReadFile.mockResolvedValue('rubric content' as any);
+
+      const originalFetch = globalThis.fetch;
+      let capturedBody: any;
+      globalThis.fetch = vi.fn().mockImplementation(async (_url: string, opts: any) => {
+        capturedBody = JSON.parse(opts.body);
+        return {
+          json: () => Promise.resolve({ content: [{ text: '{"score": 1.0, "reasoning": "ok"}' }] }),
+        };
+      }) as any;
+
+      const provider = makeProvider('');
+      const env = { ANTHROPIC_API_KEY: 'test-key' };
+      const config: GraderConfig = { ...baseConfig, provider: 'anthropic' };
+      await grader.grade('/workspace', provider, config, '/task', [], env);
+
+      expect(capturedBody.model).toBe('claude-sonnet-5');
+      expect(capturedBody.model).not.toBe('claude-sonnet-4-20250514');
+
+      globalThis.fetch = originalFetch;
+    });
   });
 
   describe('openai provider', () => {

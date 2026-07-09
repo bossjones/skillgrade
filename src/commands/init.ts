@@ -9,6 +9,7 @@ import * as fs from 'fs-extra';
 import * as path from 'path';
 import { detectSkills } from '../core/skills';
 import { parseEnvFile } from '../utils/env';
+import { resolveModel } from '../core/models';
 
 export async function runInit(dir: string, opts: { force?: boolean } = {}) {
   const evalPath = path.join(dir, 'eval.yaml');
@@ -131,7 +132,7 @@ function extractInstructionHint(skillMd: string): string {
 /**
  * Generate eval.yaml content using Gemini API.
  */
-async function generateWithLLM(
+export async function generateWithLLM(
   skills: Array<{ name: string; skillMd: string }>,
   apiKey: string,
   provider: 'gemini' | 'anthropic' | 'openai' = 'gemini'
@@ -220,18 +221,20 @@ tasks:
   const fetchOpts = { signal: AbortSignal.timeout(120_000) };
 
   if (provider === 'anthropic') {
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
+    // Honor ANTHROPIC_BASE_URL for parity with the grader (gateways/proxies, self-hosted).
+    const baseUrl = (process.env.ANTHROPIC_BASE_URL || 'https://api.anthropic.com/v1').replace(/\/+$/, '');
+    const response = await fetch(`${baseUrl}/messages`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'x-api-key': apiKey,
         'anthropic-version': '2023-06-01',
       },
+      // No `temperature`: current models (Sonnet 5, Opus 4.7+) reject sampling params with a 400.
       body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
+        model: resolveModel('anthropic'),
         max_tokens: 4096,
         messages: [{ role: 'user', content: prompt }],
-        temperature: 0.3,
       }),
       ...fetchOpts,
     });
@@ -251,7 +254,7 @@ tasks:
         'Authorization': `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: 'gpt-4o',
+        model: resolveModel('openai'),
         max_tokens: 4096,
         messages: [{ role: 'user', content: prompt }],
         temperature: 0.3,
@@ -267,7 +270,7 @@ tasks:
     text = data.choices?.[0]?.message?.content;
     if (!text) throw new Error('Empty response from OpenAI API');
   } else {
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`, {
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${resolveModel('gemini')}:generateContent?key=${apiKey}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

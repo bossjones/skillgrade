@@ -1,4 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { generateWithLLM } from '../src/commands/init';
 
 // We test extractInstructionHint and getInlineTemplate
 // These functions are not exported so we need to test them via runInit or replicate them
@@ -135,5 +136,65 @@ tasks:
     const template = getInlineTemplate();
     expect(template).toContain('"score"');
     expect(template).toContain('"details"');
+  });
+});
+
+describe('generateWithLLM — Anthropic request', () => {
+  const skills = [{ name: 'my-skill', skillMd: '# My Skill\n\nDoes a thing.' }];
+  const savedEnv = { ...process.env };
+  let originalFetch: typeof globalThis.fetch;
+
+  beforeEach(() => {
+    originalFetch = globalThis.fetch;
+  });
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+    process.env = { ...savedEnv };
+  });
+
+  // Stub fetch, capturing the request URL and parsed body for assertions.
+  function stubFetch() {
+    const captured: { url?: string; body?: any } = {};
+    globalThis.fetch = vi.fn().mockImplementation(async (url: string, opts: any) => {
+      captured.url = url;
+      captured.body = JSON.parse(opts.body);
+      return { ok: true, json: () => Promise.resolve({ content: [{ text: 'version: "1"\n' }] }) };
+    }) as any;
+    return captured;
+  }
+
+  it('uses a current, non-retired Anthropic model', async () => {
+    delete process.env.ANTHROPIC_MODEL;
+    const captured = stubFetch();
+    await generateWithLLM(skills, 'test-key', 'anthropic');
+    expect(captured.body.model).toBe('claude-sonnet-5');
+    expect(captured.body.model).not.toBe('claude-sonnet-4-20250514');
+  });
+
+  it('does not send a temperature parameter (rejected by current models)', async () => {
+    const captured = stubFetch();
+    await generateWithLLM(skills, 'test-key', 'anthropic');
+    expect(captured.body).not.toHaveProperty('temperature');
+  });
+
+  it('honors the ANTHROPIC_MODEL env override', async () => {
+    process.env.ANTHROPIC_MODEL = 'claude-opus-4-8';
+    const captured = stubFetch();
+    await generateWithLLM(skills, 'test-key', 'anthropic');
+    expect(captured.body.model).toBe('claude-opus-4-8');
+  });
+
+  it('posts to the default messages endpoint', async () => {
+    delete process.env.ANTHROPIC_BASE_URL;
+    const captured = stubFetch();
+    await generateWithLLM(skills, 'test-key', 'anthropic');
+    expect(captured.url).toBe('https://api.anthropic.com/v1/messages');
+  });
+
+  it('honors ANTHROPIC_BASE_URL for parity with the grader', async () => {
+    process.env.ANTHROPIC_BASE_URL = 'http://localhost:8080/v1';
+    const captured = stubFetch();
+    await generateWithLLM(skills, 'test-key', 'anthropic');
+    expect(captured.url).toBe('http://localhost:8080/v1/messages');
   });
 });
