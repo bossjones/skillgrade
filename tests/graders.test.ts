@@ -421,6 +421,34 @@ describe('LLMGrader', () => {
       globalThis.fetch = originalFetch;
     });
 
+    it('uses config.model (from defaults.grader_model) over the built-in default', async () => {
+      // evalRunner passes `defaults.grader_model` (or a task's grader_model) into
+      // GraderConfig.model. With no per-grader override and no env var, that config-file
+      // value must reach the request — this locks the config knob end-to-end.
+      delete process.env.ANTHROPIC_MODEL;
+      mockPathExists.mockResolvedValue(true as any);
+      mockReadFile.mockResolvedValue('rubric content' as any);
+
+      const originalFetch = globalThis.fetch;
+      let capturedBody: any;
+      globalThis.fetch = vi.fn().mockImplementation(async (_url: string, opts: any) => {
+        capturedBody = JSON.parse(opts.body);
+        return {
+          json: () => Promise.resolve({ content: [{ type: 'text', text: '{"score": 1.0, "reasoning": "ok"}' }] }),
+        };
+      }) as any;
+
+      const provider = makeProvider('');
+      const env = { ANTHROPIC_API_KEY: 'test-key' };
+      const config: GraderConfig = { ...baseConfig, provider: 'anthropic', model: 'claude-opus-4-8' };
+      await grader.grade('/workspace', provider, config, '/task', [], env);
+
+      expect(capturedBody.model).toBe('claude-opus-4-8');
+      expect(capturedBody.model).not.toBe('claude-sonnet-5');
+
+      globalThis.fetch = originalFetch;
+    });
+
     it('reads the text block past a leading thinking block', async () => {
       mockPathExists.mockResolvedValue(true as any);
       mockReadFile.mockResolvedValue('rubric content' as any);

@@ -121,7 +121,7 @@ tasks:
         rubric: |
           Did the agent follow the check → fix → verify workflow?
         provider: gemini                 # optional: gemini (default) | anthropic | openai
-        model: gemini-2.0-flash          # optional model override
+        model: gemini-3-flash-preview    # optional model override
         weight: 0.3
 
     # Per-task overrides (optional)
@@ -200,7 +200,7 @@ Evaluates the agent's session transcript against qualitative criteria:
     - Completed in ≤5 commands?
   weight: 0.3
   provider: gemini           # gemini (default) | anthropic | openai
-  model: gemini-2.0-flash    # optional, auto-detected from API key
+  model: gemini-3-flash-preview  # optional, auto-detected from API key
 ```
 
 The `provider` field selects which LLM API to call:
@@ -208,10 +208,43 @@ The `provider` field selects which LLM API to call:
 | Provider   | API Key Env Var     | Base URL Env Var (optional) | Default Model              |
 |------------|---------------------|-----------------------------|----------------------------|
 | `gemini`   | `GEMINI_API_KEY`    | -                           | `gemini-3-flash-preview`   |
-| `anthropic`| `ANTHROPIC_API_KEY` | `ANTHROPIC_BASE_URL`        | `claude-sonnet-4-20250514` |
+| `anthropic`| `ANTHROPIC_API_KEY` | `ANTHROPIC_BASE_URL`        | `claude-sonnet-5`          |
 | `openai`   | `OPENAI_API_KEY`    | `OPENAI_BASE_URL`           | `gpt-4o`                   |
 
 `ANTHROPIC_BASE_URL` and `OPENAI_BASE_URL` enable custom/self-hosted endpoints (Ollama, vLLM, etc.).
+
+### Overriding the model
+
+Model IDs get retired and new ones ship constantly — so **switching models never requires a code
+change or a new skillgrade release**. Set the model wherever is most convenient; skillgrade
+resolves it by precedence, highest first:
+
+**LLM grader** (`skillgrade` runs):
+
+1. Per-grader `model:` on a grader
+2. Per-task `grader_model:`
+3. `defaults.grader_model:` in `eval.yaml`
+4. `ANTHROPIC_MODEL` / `OPENAI_MODEL` / `GEMINI_MODEL` environment variable
+5. The provider's built-in default (table above)
+
+**`skillgrade init`** (AI-generated `eval.yaml`) has no config file yet, so it uses only:
+
+1. `ANTHROPIC_MODEL` / `OPENAI_MODEL` / `GEMINI_MODEL` environment variable
+2. The provider's built-in default
+
+So when a new model lands, either pin it in `eval.yaml`:
+
+```yaml
+defaults:
+  grader_model: claude-sonnet-5   # or any current model ID
+```
+
+…or override it for a single run without touching any file:
+
+```bash
+ANTHROPIC_MODEL=claude-opus-4-8 skillgrade
+ANTHROPIC_MODEL=claude-opus-4-8 skillgrade init
+```
 
 ### Combining Graders
 
@@ -310,7 +343,7 @@ skillgrade --agent=opencode
 skillgrade --agent=opencode --opencode-agent=build
 
 # Specify both agent and model (provider/model format)
-skillgrade --agent=opencode --opencode-agent=build --opencode-model=anthropic/claude-sonnet-4-20250514
+skillgrade --agent=opencode --opencode-agent=build --opencode-model=anthropic/claude-sonnet-5
 ```
 
 ### OpenCode Agents
@@ -327,7 +360,7 @@ Models are specified in `provider/model` format:
 
 | Model | Format |
 |-------|--------|
-| Claude Sonnet 4 | `anthropic/claude-sonnet-4-20250514` |
+| Claude Sonnet 5 | `anthropic/claude-sonnet-5` |
 | GPT 5.1 Codex | `opencode/gpt-5.1-codex` |
 
 ### CLI Options

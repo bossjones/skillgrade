@@ -64,7 +64,8 @@ export async function runInit(dir: string, opts: { force?: boolean } = {}) {
       const config = await generateWithLLM(skills, llmApiKey, llmProvider);
       await fs.writeFile(evalPath, config, 'utf-8');
       spinner.stop(fmt.green('created eval.yaml'));
-      console.log(`     Review and edit the file, then run: skillgrade\n`);
+      console.log(`     Review and edit the file, then run: skillgrade`);
+      console.log(`     Model: ${resolveModel(llmProvider)} — override with ANTHROPIC_MODEL / OPENAI_MODEL / GEMINI_MODEL\n`);
       return;
     } catch (err: any) {
       spinner.stop(fmt.red(`AI generation failed: ${err.message}`));
@@ -305,6 +306,8 @@ defaults:
   trials: 5
   timeout: 300
   threshold: 0.8
+  # grader_model: claude-sonnet-5   # pin the LLM-grader model (else the provider default)
+  # No edit needed to switch models: export ANTHROPIC_MODEL / OPENAI_MODEL / GEMINI_MODEL
   docker:
     base: node:20-slim
 
