@@ -1,6 +1,7 @@
 import { GraderConfig, GraderResult, EnvironmentProvider } from '../types';
 import * as fs from 'fs-extra';
 import * as path from 'path';
+import { resolveGeminiModel, resolveAnthropicModel, resolveOpenAIModel } from '../utils/models';
 
 export interface Grader {
     grade(
@@ -90,13 +91,6 @@ export class DeterministicGrader implements Grader {
  */
 export class LLMGrader implements Grader {
 
-    /** Default models when no model override is configured. */
-    private static readonly DEFAULT_MODELS: Record<string, string> = {
-        gemini: 'gemini-3-flash-preview',
-        anthropic: 'claude-sonnet-4-20250514',
-        openai: 'gpt-4o',
-    };
-
     async grade(
         _workspace: string,
         _provider: EnvironmentProvider,
@@ -167,7 +161,27 @@ ${transcript}
 Respond with ONLY a JSON object: {"score": <number>, "reasoning": "<brief explanation>"}`;
 
         const providerName = config.provider || 'gemini';
-        const model = config.model || LLMGrader.DEFAULT_MODELS[providerName] || 'gemini-3-flash-preview';
+        let model = config.model;
+        if (!model) {
+            try {
+                if (providerName === 'gemini') {
+                    model = await resolveGeminiModel(env?.GEMINI_API_KEY || process.env.GEMINI_API_KEY, env, 'grader');
+                } else if (providerName === 'anthropic') {
+                    model = await resolveAnthropicModel(env?.ANTHROPIC_API_KEY || process.env.ANTHROPIC_API_KEY, env, 'grader');
+                } else if (providerName === 'openai') {
+                    model = await resolveOpenAIModel(env?.OPENAI_API_KEY || process.env.OPENAI_API_KEY, env, 'grader');
+                } else {
+                    throw new Error(`Unknown grader provider: "${providerName}". Supported: gemini, anthropic, openai`);
+                }
+            } catch (err: any) {
+                return {
+                    grader_type: 'llm_rubric',
+                    score: 0,
+                    weight: config.weight,
+                    details: err.message || String(err),
+                };
+            }
+        }
 
         switch (providerName) {
             case "gemini":
@@ -184,6 +198,32 @@ Respond with ONLY a JSON object: {"score": <number>, "reasoning": "<brief explan
                     details: `Unknown grader provider: "${providerName}". Supported: gemini, anthropic, openai`,
                 };
         }
+    }
+
+    /**
+     * Turn a non-2xx LLM API response into an explicit error result.
+     *
+     * Without this, a 401/404/429 falls through to an empty completion and is
+     * reported as a score-0 "Failed to parse" — a dead API key looks like a
+     * failing eval instead of a broken one.
+     */
+    private async httpError(
+        providerLabel: string,
+        response: Response,
+        config: GraderConfig
+    ): Promise<GraderResult> {
+        let body = '';
+        try {
+            body = (await response.text()).trim().substring(0, 300);
+        } catch {
+            // Body already consumed or unreadable — the status alone is still useful.
+        }
+        return {
+            grader_type: 'llm_rubric',
+            score: 0,
+            weight: config.weight,
+            details: `${providerLabel} API returned HTTP ${response.status}${body ? `: ${body}` : ''}`
+        };
     }
 
     private async callGemini(prompt: string, model: string, config: GraderConfig, env?: Record<string, string>): Promise<GraderResult> {
@@ -207,6 +247,8 @@ Respond with ONLY a JSON object: {"score": <number>, "reasoning": "<brief explan
                     generationConfig: { temperature: 0 }
                 })
             });
+
+            if (!response.ok) return this.httpError('Gemini', response, config);
 
             const data = await response.json() as any;
             const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
@@ -244,8 +286,12 @@ Respond with ONLY a JSON object: {"score": <number>, "reasoning": "<brief explan
                 })
             });
 
+            if (!response.ok) return this.httpError('Anthropic', response, config);
+
             const data = await response.json() as any;
-            const text = data?.content?.[0]?.text || '';
+            // Adaptive thinking is on by default on current Claude models, so the first
+            // content block may be a thinking block — select the text block explicitly.
+            const text = data?.content?.find((b: any) => b.type === 'text')?.text || '';
             return this.parseResponse(text, config);
         } catch (e) {
             return { grader_type: 'llm_rubric', score: 0, weight: config.weight, details: `Anthropic API error: ${e}` };
@@ -279,6 +325,8 @@ Respond with ONLY a JSON object: {"score": <number>, "reasoning": "<brief explan
                     messages: [{ role: 'user', content: prompt }],
                 }),
             });
+
+            if (!response.ok) return this.httpError('OpenAI', response, config);
 
             const data = await response.json() as any;
             const msg = data?.choices?.[0]?.message;

@@ -9,6 +9,7 @@ import * as fs from 'fs-extra';
 import * as path from 'path';
 import { detectSkills } from '../core/skills';
 import { parseEnvFile } from '../utils/env';
+import { resolveGeminiModel, resolveAnthropicModel, resolveOpenAIModel } from '../utils/models';
 
 export async function runInit(dir: string, opts: { force?: boolean } = {}) {
   const evalPath = path.join(dir, 'eval.yaml');
@@ -129,9 +130,22 @@ function extractInstructionHint(skillMd: string): string {
 }
 
 /**
- * Generate eval.yaml content using Gemini API.
+ * Resolve an OpenAI-/Anthropic-compatible base URL from the environment.
+ *
+ * An override that is empty or whitespace is ignored rather than treated as a
+ * real value — otherwise a set-but-empty *_BASE_URL would produce "/messages".
+ * Trailing slashes are stripped so callers can append a path directly.
  */
-async function generateWithLLM(
+function resolveBaseUrl(envValue: string | undefined, fallback: string): string {
+  const override = envValue?.trim();
+  return (override || fallback).replace(/\/+$/, '');
+}
+
+/**
+ * Generate eval.yaml content using the configured LLM provider
+ * (Gemini, Anthropic, or OpenAI).
+ */
+export async function generateWithLLM(
   skills: Array<{ name: string; skillMd: string }>,
   apiKey: string,
   provider: 'gemini' | 'anthropic' | 'openai' = 'gemini'
@@ -220,7 +234,9 @@ tasks:
   const fetchOpts = { signal: AbortSignal.timeout(120_000) };
 
   if (provider === 'anthropic') {
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
+    const model = await resolveAnthropicModel(apiKey, process.env, 'init');
+    const baseUrl = resolveBaseUrl(process.env.ANTHROPIC_BASE_URL, 'https://api.anthropic.com/v1');
+    const response = await fetch(`${baseUrl}/messages`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -228,10 +244,11 @@ tasks:
         'anthropic-version': '2023-06-01',
       },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
+        model,
         max_tokens: 4096,
         messages: [{ role: 'user', content: prompt }],
-        temperature: 0.3,
+        // No `temperature`: current Claude models (Sonnet 5, Opus 4.7+) reject
+        // sampling parameters with a 400. The grader's Anthropic call omits it too.
       }),
       ...fetchOpts,
     });
@@ -241,17 +258,21 @@ tasks:
     }
 
     const data = await response.json() as any;
-    text = data.content?.[0]?.text;
+    // Adaptive thinking is on by default on current Claude models, so the first
+    // content block may be a thinking block — select the text block explicitly.
+    text = data.content?.find((b: any) => b.type === 'text')?.text;
     if (!text) throw new Error('Empty response from Anthropic API');
   } else if (provider === 'openai') {
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    const model = await resolveOpenAIModel(apiKey, process.env, 'init');
+    const baseUrl = resolveBaseUrl(process.env.OPENAI_BASE_URL, 'https://api.openai.com/v1');
+    const response = await fetch(`${baseUrl}/chat/completions`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: 'gpt-4o',
+        model,
         max_tokens: 4096,
         messages: [{ role: 'user', content: prompt }],
         temperature: 0.3,
@@ -267,7 +288,8 @@ tasks:
     text = data.choices?.[0]?.message?.content;
     if (!text) throw new Error('Empty response from OpenAI API');
   } else {
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`, {
+    const model = await resolveGeminiModel(apiKey, process.env, 'init');
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
